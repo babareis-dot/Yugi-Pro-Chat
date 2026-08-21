@@ -19,34 +19,46 @@ const router = useRouter();
 let defalutBtnLabel = 'Kod Gönder';
 
 let state = reactive({
-  isQRLogin: !utils.isMobile(),
+  isQRLogin: false,
   isLoadingQR: false,
   isShowRefreshQrcode: false,
+
   qrcode: {
     img: '',
     uid: ''
   },
+
   user: {
-    phone: '',
+    email: '',
     code: ''
   },
+
   btnLabel: defalutBtnLabel,
+
   errorMsg: {
-    phone: '',
+    email: '',
     code: ''
   }
 });
 
 function onVerifySuccess(result){
   let { data } = result;
-  let { user_id, authorization, nickname, avatar, im_token } = data;
+
+  let {
+    user_id,
+    authorization,
+    nickname,
+    avatar,
+    im_token
+  } = data;
 
   if(!avatar){
     avatar = common.getTextAvatar(nickname);
   }
 
   if(!im_token){
-    return state.errorMsg.code = 'Giriş başarısız: IM Token bulunamadı.'
+    return state.errorMsg.code =
+      'Giriş başarısız: IM Token bulunamadı.';
   }
 
   let user = {
@@ -63,10 +75,11 @@ function onVerifySuccess(result){
   let accounts = Storage.get(STORAGE.USERS);
 
   if(utils.isEmpty(accounts)){
-    accounts = [user]
+    accounts = [user];
   }
 
   if(!props.isLogin){
+
     let index = utils.find(accounts, (account) => {
       return utils.isEqual(account.id, user.id);
     });
@@ -79,32 +92,43 @@ function onVerifySuccess(result){
   Storage.set(STORAGE.USERS, accounts);
 
   if(props.isLogin){
-    router.replace({ name: 'ConversationList' });
+    router.replace({
+      name: 'ConversationList'
+    });
   }else{
     location.reload();
   }
 }
 
 function onLogin() {
+
   let { user } = state;
-  let { phone, code } = user;
+  let { email, code } = user;
 
-  if (utils.isEmpty(phone)) {
-    return state.errorMsg.phone = 'Telefon numarası boş bırakılamaz.';
+  if(utils.isEmpty(email)){
+    return state.errorMsg.email =
+      'E-posta adresi boş bırakılamaz.';
   }
 
-  if(!utils.isPhoneNumber(phone)) {
-    return state.errorMsg.phone = 'Telefon numarası geçersiz.';
+  if(!utils.isEmail(email)){
+    return state.errorMsg.email =
+      'Geçerli bir e-posta adresi girin.';
   }
 
-  if (utils.isEmpty(code)) {
-    return state.errorMsg.code = 'Doğrulama kodu boş bırakılamaz.';
+  if(utils.isEmpty(code)){
+    return state.errorMsg.code =
+      'Doğrulama kodu boş bırakılamaz.';
   }
 
-  User.verifyCode({ phone, code }).then((result) => {
+  User.verifyCode({
+    email,
+    code
+  }).then((result) => {
+
     let errorCode = result.code;
 
     if(!utils.isEqual(errorCode, RESPONSE.SUCCESS)){
+
       return context.proxy.$toast({
         text: `Giriş başarısız. Hata kodu: ${errorCode}`,
         icon: 'error'
@@ -118,26 +142,36 @@ function onLogin() {
 let isSending = false;
 
 function onSend(){
-  let { user } = state;
-  let { phone } = user;
 
-  if (utils.isEmpty(phone)) {
-    return state.errorMsg.phone = 'Telefon numarası boş bırakılamaz.';
+  let { user } = state;
+  let { email } = user;
+
+  if(utils.isEmpty(email)){
+    return state.errorMsg.email =
+      'E-posta adresi boş bırakılamaz.';
   }
 
-  if (!utils.isPhoneNumber(phone)) {
-    return state.errorMsg.phone = 'Telefon numarası geçersiz.';
+  if(!utils.isEmail(email)){
+    return state.errorMsg.email =
+      'Geçerli bir e-posta adresi girin.';
   }
 
   if(isSending){
-    isSending = true;
     return;
   }
 
-  User.sendCode({ phone }).then((result) => {
+  isSending = true;
+
+  User.sendCode({
+    email
+  }).then((result) => {
+
     let errorCode = result.code;
 
     if(!utils.isEqual(errorCode, RESPONSE.SUCCESS)){
+
+      isSending = false;
+
       return context.proxy.$toast({
         text: `Doğrulama kodu gönderilemedi. Hata kodu: ${errorCode}`,
         icon: 'error'
@@ -146,30 +180,50 @@ function onSend(){
 
     let seconds = 59;
 
-    utils.extend(state, { btnLabel: seconds });
+    utils.extend(state, {
+      btnLabel: seconds
+    });
 
     let inteval = setInterval(() => {
+
       seconds -= 1;
 
-      if(utils.isEqual(seconds, 1)){
+      if(seconds <= 0){
+
         utils.extend(state, {
           btnLabel: defalutBtnLabel,
           isSending: false
         });
 
-        return clearInterval(inteval);
+        clearInterval(inteval);
+        return;
       }
 
-      utils.extend(state, { btnLabel: seconds });
-    }, 500);
+      utils.extend(state, {
+        btnLabel: seconds
+      });
+
+    }, 1000);
+
+  }).catch(() => {
+
+    isSending = false;
+
+    context.proxy.$toast({
+      text: 'Doğrulama kodu gönderilirken bir hata oluştu.',
+      icon: 'error'
+    });
+
   });
 }
 
-function onInput() {
+function onInput(){
+
   utils.extend(state.errorMsg, {
-    phone: '',
+    email: '',
     code: ''
   });
+
 }
 
 function setQrLogin(isQR){
@@ -177,66 +231,93 @@ function setQrLogin(isQR){
 }
 
 function getLoginQR(){
+
   state.isLoadingQR = true;
 
   User.getQRCode().then((result) => {
+
     state.isLoadingQR = false;
 
-    let { code, data } = result;
+    let {
+      code,
+      data
+    } = result;
 
     if(!utils.isEqual(code, RESPONSE.SUCCESS)){
       return;
     }
 
-    let { qr_code: img, id } = data;
+    let {
+      qr_code: img,
+      id
+    } = data;
 
     utils.extend(state, {
+
       qrcode: {
         img,
         uid: id
       },
+
       isShowRefreshQrcode: false
     });
 
     if(state.isQRLogin){
-      startPolling()
+      startPolling();
     }
+
   });
 }
 
 let user = Storage.get(STORAGE.USER_TOKEN);
 
-if(!utils.isMobile() && !user.id){
-  getLoginQR();
-}
-
 let pollingTimer = 0;
 
 function startPolling(){
+
   let {
-    qrcode: { uid }
+    qrcode: {
+      uid
+    }
   } = state;
 
   if(!uid){
     return;
   }
 
-  User.startPolling({ id: uid }).then((result) => {
-    let { code, data } = result;
+  User.startPolling({
+    id: uid
+  }).then((result) => {
 
-    if(utils.isEqual(code, RESPONSE.LOGIN_QR_WATTING)){
+    let {
+      code
+    } = result;
+
+    if(utils.isEqual(
+      code,
+      RESPONSE.LOGIN_QR_WATTING
+    )){
+
       pollingTimer = setTimeout(() => {
         startPolling();
-      }, 2 * 1000);
+      }, 2000);
+
     }
 
-    if(utils.isEqual(code, RESPONSE.LOGIN_QR_EXPIRE)){
+    if(utils.isEqual(
+      code,
+      RESPONSE.LOGIN_QR_EXPIRE
+    )){
       state.isShowRefreshQrcode = true;
     }
 
-    if(utils.isEqual(code, RESPONSE.SUCCESS)){
+    if(utils.isEqual(
+      code,
+      RESPONSE.SUCCESS
+    )){
       onVerifySuccess(result);
     }
+
   });
 }
 
@@ -248,24 +329,42 @@ function onShowServerSetting(isShow){
   state.isShowServerSetting = isShow;
 }
 
-watch(() => state.isQRLogin, (isQR) => {
-  if(isQR){
-    startPolling();
-  }else{
-    stopPolling();
-  }
-});
+watch(
+  () => state.isQRLogin,
+  (isQR) => {
 
-watch(() => props.isShow, () => {
-  if(props.isShow){
-    getLoginQR();
-  }else{
-    stopPolling();
+    if(isQR){
+
+      if(!state.qrcode.uid){
+        getLoginQR();
+      }else{
+        startPolling();
+      }
+
+    }else{
+      stopPolling();
+    }
+
   }
-});
+);
+
+watch(
+  () => props.isShow,
+  () => {
+
+    if(props.isShow && state.isQRLogin){
+      getLoginQR();
+    }else{
+      stopPolling();
+    }
+
+  }
+);
+
 </script>
 
 <template>
+
   <div
     class="tyn-root jg-login-container"
     :class="{
@@ -277,16 +376,25 @@ watch(() => props.isShow, () => {
     <div
       class="jg-server-settings wr wr-security-sum"
       @click="onShowServerSetting(true)"
-      v-if="props.isLogin">
+      v-if="props.isLogin"
+    >
     </div>
 
-    <div class="jg-nlogin-main" v-if="state.isQRLogin">
+
+    <!-- QR KOD İLE GİRİŞ -->
+
+    <div
+      class="jg-nlogin-main"
+      v-if="state.isQRLogin"
+    >
 
       <div
         class="jg-nlogin-qrbox"
         :style="{
           'background-image':
-            'url(data:image/png;base64,' + state.qrcode.img + ')'
+          'url(data:image/png;base64,' +
+          state.qrcode.img +
+          ')'
         }"
       >
 
@@ -299,20 +407,28 @@ watch(() => props.isShow, () => {
 
           <div
             class="jg-nlogin-loading"
-            v-if="state.isLoadingQR">
+            v-if="state.isLoadingQR"
+          >
           </div>
 
-          <div class="jg-nlogin-refresh" v-else>
+          <div
+            class="jg-nlogin-refresh"
+            v-else
+          >
+
             <button
               class="btn btn-sm btn-success"
               @click="getLoginQR()"
             >
               QR Kodu Yenile
             </button>
+
           </div>
 
         </div>
+
       </div>
+
 
       <div class="jg-nlogin-intro-box">
 
@@ -331,7 +447,7 @@ watch(() => props.isShow, () => {
           </li>
 
           <li class="jg-nlogin-intro wr wr-3">
-            Girişi onaylamak için telefonunuzla bu QR kodu tarayın
+            Girişi onaylamak için QR kodu tarayın
           </li>
 
         </ul>
@@ -340,15 +456,23 @@ watch(() => props.isShow, () => {
           class="jg-nlogin-button"
           @click="setQrLogin(false)"
         >
-          TELEFON NUMARASIYLA GİRİŞ YAP
+          E-POSTA İLE GİRİŞ YAP
         </div>
 
       </div>
+
     </div>
 
-    <div class="jg-nlogin-main" v-else>
+
+    <!-- E-POSTA İLE GİRİŞ -->
+
+    <div
+      class="jg-nlogin-main"
+      v-else
+    >
 
       <div class="jg-nlogin-normalbox">
+
         <div class="jg-nlogin-nlicon"></div>
 
         <h2 class="jg-nlogin-nltitle">
@@ -358,39 +482,62 @@ watch(() => props.isShow, () => {
         <span class="fs10">
           v1.7.24
         </span>
+
       </div>
 
-      <div class="jg-nlogin-intro-box jg-nlogin-btnbox">
+
+      <div
+        class="jg-nlogin-intro-box jg-nlogin-btnbox"
+      >
+
+        <!-- E-POSTA -->
 
         <div class="form-group">
 
           <div class="form-control-wrap">
+
             <input
-              type="text"
+              type="email"
               class="form-control"
-              v-model="state.user.phone"
-              placeholder="Telefon numaranızı girin"
+              v-model="state.user.email"
+              placeholder="E-posta adresinizi girin"
+              autocomplete="email"
               @input="onInput()"
               @keydown.enter="onLogin()"
             >
+
           </div>
 
-          <label class="form-label" for="email-address">
-            <span class="small ms-2 text-danger">
-              {{ state.errorMsg.phone }}
+          <label
+            class="form-label"
+            for="email-address"
+          >
+
+            <span
+              class="small ms-2 text-danger"
+            >
+              {{ state.errorMsg.email }}
             </span>
+
           </label>
 
         </div>
 
+
+        <!-- DOĞRULAMA KODU -->
+
         <div class="form-group">
 
-          <div class="form-control-wrap jg-login-sms form-control">
+          <div
+            class="form-control-wrap jg-login-sms form-control"
+          >
 
             <input
               type="text"
+              inputmode="numeric"
               v-model="state.user.code"
-              placeholder="Doğrulama kodu: 000000"
+              placeholder="Doğrulama kodunu girin"
+              autocomplete="one-time-code"
               @input="onInput()"
               @keydown.enter="onLogin()"
             >
@@ -405,14 +552,22 @@ watch(() => props.isShow, () => {
           </div>
 
           <label class="form-label">
-            <span class="small ms-2 text-danger">
+
+            <span
+              class="small ms-2 text-danger"
+            >
               {{ state.errorMsg.code }}
             </span>
+
           </label>
 
         </div>
 
+
+        <!-- GİRİŞ BUTONU -->
+
         <div class="form-group">
+
           <div class="form-control-wrap">
 
             <a
@@ -423,7 +578,11 @@ watch(() => props.isShow, () => {
             </a>
 
           </div>
+
         </div>
+
+
+        <!-- QR GİRİŞ -->
 
         <div
           class="jg-nlogin-button jg-nlogin-num-btn"
@@ -433,9 +592,11 @@ watch(() => props.isShow, () => {
         </div>
 
       </div>
+
     </div>
 
   </div>
+
 
   <ModalServerSetting
     :is-show="state.isShowServerSetting"
