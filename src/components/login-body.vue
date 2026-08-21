@@ -16,49 +16,131 @@ let context = getCurrentInstance();
 
 const router = useRouter();
 
-let defalutBtnLabel = 'Kod Gönder';
+let defalutBtnLabel = "Kod Gönder";
 
 let state = reactive({
   isQRLogin: false,
   isLoadingQR: false,
   isShowRefreshQrcode: false,
+  isShowServerSetting: false,
 
   qrcode: {
-    img: '',
-    uid: ''
+    img: "",
+    uid: ""
   },
 
   user: {
-    email: '',
-    code: ''
+    email: "",
+    code: ""
   },
 
   btnLabel: defalutBtnLabel,
 
   errorMsg: {
-    email: '',
-    code: ''
+    email: "",
+    code: ""
   }
 });
 
-function onVerifySuccess(result){
-  let { data } = result;
 
-  let {
-    user_id,
-    authorization,
-    nickname,
-    avatar,
-    im_token
-  } = data;
+function showToast(text, icon = "error") {
+  try {
+    if (
+      context &&
+      context.proxy &&
+      context.proxy.$toast
+    ) {
+      context.proxy.$toast({
+        text,
+        icon
+      });
+    }
+  } catch (error) {
+    console.error(error);
+  }
+}
 
-  if(!avatar){
-    avatar = common.getTextAvatar(nickname);
+
+function showLoginError(message) {
+  state.errorMsg.code = message;
+  showToast(message, "error");
+}
+
+
+function onVerifySuccess(result) {
+
+  if (!result) {
+    showLoginError(
+      "Sunucudan giriş cevabı alınamadı."
+    );
+    return;
   }
 
-  if(!im_token){
-    return state.errorMsg.code =
-      'Giriş başarısız: IM Token bulunamadı.';
+  if (!result.data) {
+    console.error(
+      "Giriş cevabı:",
+      result
+    );
+
+    showLoginError(
+      "Sunucudan gelen giriş cevabı eksik."
+    );
+    return;
+  }
+
+  let data = result.data;
+
+  let user_id = data.user_id;
+  let authorization = data.authorization;
+  let nickname = data.nickname;
+  let avatar = data.avatar;
+  let im_token = data.im_token;
+
+  if (!user_id) {
+    console.error(
+      "Kullanıcı ID bulunamadı:",
+      result
+    );
+
+    showLoginError(
+      "Giriş başarısız: Kullanıcı bilgisi alınamadı."
+    );
+    return;
+  }
+
+  if (!authorization) {
+    console.error(
+      "Authorization bulunamadı:",
+      result
+    );
+
+    showLoginError(
+      "Giriş başarısız: Oturum anahtarı alınamadı."
+    );
+    return;
+  }
+
+  if (!im_token) {
+    console.error(
+      "IM Token bulunamadı:",
+      result
+    );
+
+    showLoginError(
+      "Giriş başarısız: IM Token alınamadı."
+    );
+    return;
+  }
+
+  nickname =
+    nickname ||
+    state.user.email.split("@")[0] ||
+    "Kullanıcı";
+
+  if (!avatar) {
+    avatar = common.getTextAvatar(
+      nickname
+    );
   }
 
   let user = {
@@ -67,301 +149,582 @@ function onVerifySuccess(result){
     authorization: authorization,
     name: nickname,
     portrait: avatar,
+    email: state.user.email,
     isUsed: true
   };
 
-  Storage.set(STORAGE.USER_TOKEN, user);
+  Storage.set(
+    STORAGE.USER_TOKEN,
+    user
+  );
 
-  let accounts = Storage.get(STORAGE.USERS);
+  let accounts =
+    Storage.get(STORAGE.USERS);
 
-  if(utils.isEmpty(accounts)){
-    accounts = [user];
+  if (
+    utils.isEmpty(accounts) ||
+    !Array.isArray(accounts)
+  ) {
+    accounts = [];
   }
 
-  if(!props.isLogin){
-
-    let index = utils.find(accounts, (account) => {
-      return utils.isEqual(account.id, user.id);
-    });
-
-    if(utils.isEqual(index, -1)){
-      accounts.push(user);
+  let index = utils.find(
+    accounts,
+    (account) => {
+      return utils.isEqual(
+        account.id,
+        user.id
+      );
     }
+  );
+
+  if (
+    utils.isEqual(index, -1)
+  ) {
+    accounts.push(user);
+  } else {
+    accounts[index] = user;
   }
 
-  Storage.set(STORAGE.USERS, accounts);
+  Storage.set(
+    STORAGE.USERS,
+    accounts
+  );
 
-  if(props.isLogin){
-    router.replace({
-      name: 'ConversationList'
-    });
-  }else{
+  state.errorMsg.code = "";
+
+  showToast(
+    "Giriş başarılı.",
+    "success"
+  );
+
+  if (props.isLogin) {
+
+    router
+      .replace({
+        name: "ConversationList"
+      })
+      .catch((error) => {
+
+        console.error(
+          "Sayfa yönlendirme hatası:",
+          error
+        );
+
+        location.reload();
+
+      });
+
+  } else {
+
     location.reload();
+
   }
 }
+
 
 function onLogin() {
 
-  let { user } = state;
-  let { email, code } = user;
+  state.errorMsg.email = "";
+  state.errorMsg.code = "";
 
-  if(utils.isEmpty(email)){
-    return state.errorMsg.email =
-      'E-posta adresi boş bırakılamaz.';
-  }
+  let email =
+    String(
+      state.user.email || ""
+    ).trim();
 
-  if(!utils.isEmail(email)){
-    return state.errorMsg.email =
-      'Geçerli bir e-posta adresi girin.';
-  }
+  let code =
+    String(
+      state.user.code || ""
+    ).trim();
 
-  if(utils.isEmpty(code)){
-    return state.errorMsg.code =
-      'Doğrulama kodu boş bırakılamaz.';
-  }
-
-  User.verifyCode({
-    email,
-    code
-  }).then((result) => {
-
-    let errorCode = result.code;
-
-    if(!utils.isEqual(errorCode, RESPONSE.SUCCESS)){
-
-      return context.proxy.$toast({
-        text: `Giriş başarısız. Hata kodu: ${errorCode}`,
-        icon: 'error'
-      });
-    }
-
-    onVerifySuccess(result);
-  });
-}
-
-let isSending = false;
-
-function onSend(){
-
-  let { user } = state;
-  let { email } = user;
-
-  if(utils.isEmpty(email)){
-    return state.errorMsg.email =
-      'E-posta adresi boş bırakılamaz.';
-  }
-
-  if(!utils.isEmail(email)){
-    return state.errorMsg.email =
-      'Geçerli bir e-posta adresi girin.';
-  }
-
-  if(isSending){
+  if (utils.isEmpty(email)) {
+    state.errorMsg.email =
+      "E-posta adresi boş bırakılamaz.";
     return;
   }
 
-  isSending = true;
+  if (!utils.isEmail(email)) {
+    state.errorMsg.email =
+      "Geçerli bir e-posta adresi girin.";
+    return;
+  }
 
-  User.sendCode({
-    email
-  }).then((result) => {
+  if (utils.isEmpty(code)) {
+    state.errorMsg.code =
+      "Doğrulama kodu boş bırakılamaz.";
+    return;
+  }
 
-    let errorCode = result.code;
+  state.user.email = email;
+  state.user.code = code;
 
-    if(!utils.isEqual(errorCode, RESPONSE.SUCCESS)){
+  User
+    .verifyCode({
+      email,
+      code
+    })
+    .then((result) => {
 
-      isSending = false;
+      console.log(
+        "E-posta giriş cevabı:",
+        result
+      );
 
-      return context.proxy.$toast({
-        text: `Doğrulama kodu gönderilemedi. Hata kodu: ${errorCode}`,
-        icon: 'error'
-      });
-    }
-
-    let seconds = 59;
-
-    utils.extend(state, {
-      btnLabel: seconds
-    });
-
-    let inteval = setInterval(() => {
-
-      seconds -= 1;
-
-      if(seconds <= 0){
-
-        utils.extend(state, {
-          btnLabel: defalutBtnLabel,
-          isSending: false
-        });
-
-        clearInterval(inteval);
+      if (!result) {
+        showLoginError(
+          "Sunucudan cevap alınamadı."
+        );
         return;
       }
 
-      utils.extend(state, {
-        btnLabel: seconds
-      });
+      let errorCode =
+        result.code;
 
-    }, 1000);
+      /*
+        Bazı sunucularda başarı kodu
+        sayı 0, bazılarında "0"
+        şeklinde gelebilir.
+      */
+      let isSuccess =
+        utils.isEqual(
+          errorCode,
+          RESPONSE.SUCCESS
+        ) ||
+        String(errorCode) ===
+          String(RESPONSE.SUCCESS);
 
-  }).catch(() => {
+      if (!isSuccess) {
 
-    isSending = false;
+        let message =
+          result.msg ||
+          result.message ||
+          `Hata kodu: ${errorCode}`;
 
-    context.proxy.$toast({
-      text: 'Doğrulama kodu gönderilirken bir hata oluştu.',
-      icon: 'error'
+        showLoginError(
+          `Giriş başarısız: ${message}`
+        );
+
+        return;
+      }
+
+      onVerifySuccess(result);
+
+    })
+    .catch((error) => {
+
+      console.error(
+        "E-posta giriş hatası:",
+        error
+      );
+
+      let message =
+        error &&
+        error.message
+          ? error.message
+          : "Bilinmeyen bağlantı hatası";
+
+      showLoginError(
+        `Giriş isteği başarısız: ${message}`
+      );
+
     });
-
-  });
 }
 
-function onInput(){
 
-  utils.extend(state.errorMsg, {
-    email: '',
-    code: ''
-  });
+let isSending = false;
 
-}
 
-function setQrLogin(isQR){
-  state.isQRLogin = isQR;
-}
+function onSend() {
 
-function getLoginQR(){
+  state.errorMsg.email = "";
+  state.errorMsg.code = "";
 
-  state.isLoadingQR = true;
+  let email =
+    String(
+      state.user.email || ""
+    ).trim();
 
-  User.getQRCode().then((result) => {
-
-    state.isLoadingQR = false;
-
-    let {
-      code,
-      data
-    } = result;
-
-    if(!utils.isEqual(code, RESPONSE.SUCCESS)){
-      return;
-    }
-
-    let {
-      qr_code: img,
-      id
-    } = data;
-
-    utils.extend(state, {
-
-      qrcode: {
-        img,
-        uid: id
-      },
-
-      isShowRefreshQrcode: false
-    });
-
-    if(state.isQRLogin){
-      startPolling();
-    }
-
-  });
-}
-
-let user = Storage.get(STORAGE.USER_TOKEN);
-
-let pollingTimer = 0;
-
-function startPolling(){
-
-  let {
-    qrcode: {
-      uid
-    }
-  } = state;
-
-  if(!uid){
+  if (utils.isEmpty(email)) {
+    state.errorMsg.email =
+      "E-posta adresi boş bırakılamaz.";
     return;
   }
 
-  User.startPolling({
-    id: uid
-  }).then((result) => {
+  if (!utils.isEmail(email)) {
+    state.errorMsg.email =
+      "Geçerli bir e-posta adresi girin.";
+    return;
+  }
 
-    let {
-      code
-    } = result;
+  if (isSending) {
+    return;
+  }
 
-    if(utils.isEqual(
-      code,
-      RESPONSE.LOGIN_QR_WATTING
-    )){
+  state.user.email = email;
 
-      pollingTimer = setTimeout(() => {
+  isSending = true;
+
+  state.btnLabel =
+    "Gönderiliyor...";
+
+  User
+    .sendCode({
+      email
+    })
+    .then((result) => {
+
+      console.log(
+        "Kod gönderme cevabı:",
+        result
+      );
+
+      if (!result) {
+
+        isSending = false;
+        state.btnLabel =
+          defalutBtnLabel;
+
+        showLoginError(
+          "Kod gönderme sunucusundan cevap alınamadı."
+        );
+
+        return;
+      }
+
+      let errorCode =
+        result.code;
+
+      let isSuccess =
+        utils.isEqual(
+          errorCode,
+          RESPONSE.SUCCESS
+        ) ||
+        String(errorCode) ===
+          String(RESPONSE.SUCCESS);
+
+      if (!isSuccess) {
+
+        isSending = false;
+
+        state.btnLabel =
+          defalutBtnLabel;
+
+        let message =
+          result.msg ||
+          result.message ||
+          `Hata kodu: ${errorCode}`;
+
+        showLoginError(
+          `Doğrulama kodu gönderilemedi: ${message}`
+        );
+
+        return;
+      }
+
+      showToast(
+        "Doğrulama kodu e-posta adresinize gönderildi.",
+        "success"
+      );
+
+      let seconds = 59;
+
+      state.btnLabel =
+        `${seconds} sn`;
+
+      let interval =
+        setInterval(() => {
+
+          seconds -= 1;
+
+          if (seconds <= 0) {
+
+            clearInterval(
+              interval
+            );
+
+            state.btnLabel =
+              defalutBtnLabel;
+
+            isSending = false;
+
+            return;
+          }
+
+          state.btnLabel =
+            `${seconds} sn`;
+
+        }, 1000);
+
+    })
+    .catch((error) => {
+
+      console.error(
+        "Kod gönderme hatası:",
+        error
+      );
+
+      isSending = false;
+
+      state.btnLabel =
+        defalutBtnLabel;
+
+      let message =
+        error &&
+        error.message
+          ? error.message
+          : "Bağlantı hatası";
+
+      showLoginError(
+        `Doğrulama kodu gönderilemedi: ${message}`
+      );
+
+    });
+
+}
+
+
+function onInput() {
+
+  utils.extend(
+    state.errorMsg,
+    {
+      email: "",
+      code: ""
+    }
+  );
+
+}
+
+
+function setQrLogin(isQR) {
+
+  state.isQRLogin = isQR;
+
+}
+
+
+function getLoginQR() {
+
+  state.isLoadingQR = true;
+
+  User
+    .getQRCode()
+    .then((result) => {
+
+      state.isLoadingQR =
+        false;
+
+      if (!result) {
+        return;
+      }
+
+      let code =
+        result.code;
+
+      let data =
+        result.data;
+
+      let isSuccess =
+        utils.isEqual(
+          code,
+          RESPONSE.SUCCESS
+        ) ||
+        String(code) ===
+          String(RESPONSE.SUCCESS);
+
+      if (!isSuccess) {
+        return;
+      }
+
+      if (!data) {
+        return;
+      }
+
+      let img =
+        data.qr_code;
+
+      let id =
+        data.id;
+
+      utils.extend(
+        state,
+        {
+          qrcode: {
+            img,
+            uid: id
+          },
+
+          isShowRefreshQrcode:
+            false
+        }
+      );
+
+      if (
+        state.isQRLogin
+      ) {
         startPolling();
-      }, 2000);
+      }
 
-    }
+    })
+    .catch((error) => {
 
-    if(utils.isEqual(
-      code,
-      RESPONSE.LOGIN_QR_EXPIRE
-    )){
-      state.isShowRefreshQrcode = true;
-    }
+      state.isLoadingQR =
+        false;
 
-    if(utils.isEqual(
-      code,
-      RESPONSE.SUCCESS
-    )){
-      onVerifySuccess(result);
-    }
+      console.error(
+        "QR kod hatası:",
+        error
+      );
 
-  });
+    });
+
 }
 
-function stopPolling(){
-  clearTimeout(pollingTimer);
+
+let pollingTimer = 0;
+
+
+function startPolling() {
+
+  let uid =
+    state.qrcode.uid;
+
+  if (!uid) {
+    return;
+  }
+
+  User
+    .startPolling({
+      id: uid
+    })
+    .then((result) => {
+
+      if (!result) {
+        return;
+      }
+
+      let code =
+        result.code;
+
+      if (
+        utils.isEqual(
+          code,
+          RESPONSE.LOGIN_QR_WATTING
+        )
+      ) {
+
+        pollingTimer =
+          setTimeout(() => {
+            startPolling();
+          }, 2000);
+
+      }
+
+      if (
+        utils.isEqual(
+          code,
+          RESPONSE.LOGIN_QR_EXPIRE
+        )
+      ) {
+
+        state.isShowRefreshQrcode =
+          true;
+
+      }
+
+      let isSuccess =
+        utils.isEqual(
+          code,
+          RESPONSE.SUCCESS
+        ) ||
+        String(code) ===
+          String(RESPONSE.SUCCESS);
+
+      if (isSuccess) {
+        onVerifySuccess(
+          result
+        );
+      }
+
+    })
+    .catch((error) => {
+
+      console.error(
+        "QR giriş kontrol hatası:",
+        error
+      );
+
+    });
+
 }
 
-function onShowServerSetting(isShow){
-  state.isShowServerSetting = isShow;
+
+function stopPolling() {
+
+  clearTimeout(
+    pollingTimer
+  );
+
 }
+
+
+function onShowServerSetting(
+  isShow
+) {
+
+  state.isShowServerSetting =
+    isShow;
+
+}
+
 
 watch(
   () => state.isQRLogin,
   (isQR) => {
 
-    if(isQR){
+    if (isQR) {
 
-      if(!state.qrcode.uid){
+      if (
+        !state.qrcode.uid
+      ) {
         getLoginQR();
-      }else{
+      } else {
         startPolling();
       }
 
-    }else{
+    } else {
+
       stopPolling();
+
     }
 
   }
 );
 
+
 watch(
   () => props.isShow,
   () => {
 
-    if(props.isShow && state.isQRLogin){
+    if (
+      props.isShow &&
+      state.isQRLogin
+    ) {
+
       getLoginQR();
-    }else{
+
+    } else {
+
       stopPolling();
+
     }
 
   }
 );
 
 </script>
+
 
 <template>
 
@@ -398,7 +761,10 @@ watch(
         }"
       >
 
-        <div class="jg-nlogin-icon"></div>
+        <div
+          class="jg-nlogin-icon"
+        >
+        </div>
 
         <div
           class="jg-nlogin-loading-box"
@@ -430,23 +796,35 @@ watch(
       </div>
 
 
-      <div class="jg-nlogin-intro-box">
+      <div
+        class="jg-nlogin-intro-box"
+      >
 
-        <h2 class="jg-nlogin-intro-title">
+        <h2
+          class="jg-nlogin-intro-title"
+        >
           QR Kod ile JuggleChat'e Giriş Yap
         </h2>
 
-        <ul class="jg-nlogin-intros">
+        <ul
+          class="jg-nlogin-intros"
+        >
 
-          <li class="jg-nlogin-intro wr wr-1">
+          <li
+            class="jg-nlogin-intro wr wr-1"
+          >
             Telefonunuzdan JuggleChat'i açın
           </li>
 
-          <li class="jg-nlogin-intro wr wr-2">
+          <li
+            class="jg-nlogin-intro wr wr-2"
+          >
             Ana Sayfa → QR Kod bölümüne gidin
           </li>
 
-          <li class="jg-nlogin-intro wr wr-3">
+          <li
+            class="jg-nlogin-intro wr wr-3"
+          >
             Girişi onaylamak için QR kodu tarayın
           </li>
 
@@ -471,15 +849,24 @@ watch(
       v-else
     >
 
-      <div class="jg-nlogin-normalbox">
+      <div
+        class="jg-nlogin-normalbox"
+      >
 
-        <div class="jg-nlogin-nlicon"></div>
+        <div
+          class="jg-nlogin-nlicon"
+        >
+        </div>
 
-        <h2 class="jg-nlogin-nltitle">
+        <h2
+          class="jg-nlogin-nltitle"
+        >
           JuggleChat
         </h2>
 
-        <span class="fs10">
+        <span
+          class="fs10"
+        >
           v1.7.24
         </span>
 
@@ -492,9 +879,13 @@ watch(
 
         <!-- E-POSTA -->
 
-        <div class="form-group">
+        <div
+          class="form-group"
+        >
 
-          <div class="form-control-wrap">
+          <div
+            class="form-control-wrap"
+          >
 
             <input
               type="email"
@@ -510,7 +901,6 @@ watch(
 
           <label
             class="form-label"
-            for="email-address"
           >
 
             <span
@@ -526,7 +916,9 @@ watch(
 
         <!-- DOĞRULAMA KODU -->
 
-        <div class="form-group">
+        <div
+          class="form-group"
+        >
 
           <div
             class="form-control-wrap jg-login-sms form-control"
@@ -536,7 +928,7 @@ watch(
               type="text"
               inputmode="numeric"
               v-model="state.user.code"
-              placeholder="Doğrulama kodunu girin"
+              placeholder="E-postanıza gelen doğrulama kodunu girin"
               autocomplete="one-time-code"
               @input="onInput()"
               @keydown.enter="onLogin()"
@@ -551,7 +943,9 @@ watch(
 
           </div>
 
-          <label class="form-label">
+          <label
+            class="form-label"
+          >
 
             <span
               class="small ms-2 text-danger"
@@ -564,11 +958,15 @@ watch(
         </div>
 
 
-        <!-- GİRİŞ BUTONU -->
+        <!-- GİRİŞ -->
 
-        <div class="form-group">
+        <div
+          class="form-group"
+        >
 
-          <div class="form-control-wrap">
+          <div
+            class="form-control-wrap"
+          >
 
             <a
               class="btn btn-primary w-100"
@@ -582,7 +980,7 @@ watch(
         </div>
 
 
-        <!-- QR GİRİŞ -->
+        <!-- QR -->
 
         <div
           class="jg-nlogin-button jg-nlogin-num-btn"
