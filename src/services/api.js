@@ -1,8 +1,10 @@
 import { CONFIG } from '../config'
 import utils from '../common/utils'
+
 let SERVER_PATH = {
   USER_SENDCODE: 'email/send',
-USER_VERIFYCODE: 'email_login',
+  USER_VERIFYCODE: 'email/login',
+
   USER_MODIFY: 'users/update',
   USER_UPDATE_SETTING: 'users/updsettings',
   USER_SEARCH: 'users/search',
@@ -18,7 +20,7 @@ USER_VERIFYCODE: 'email_login',
   FRIEND_NEW_LIST: 'friends/applications',
   FRIEND_CONFIRM: 'friends/confirm',
   FRIEND_BOTS: 'bots/list',
-  
+
   GROUP_CREATE: 'groups/add',
   GROUP_UPDATE: 'groups/update',
   GROUP_LIST: 'groups/mygroups',
@@ -36,11 +38,14 @@ USER_VERIFYCODE: 'email_login',
 
   AI_ANSWER: 'assistants/answer',
 };
+
 utils.forEach(SERVER_PATH, (url, name) => {
   let protoclName = location.protocol;
+
   if(protoclName == 'file:'){
     protoclName = 'https:';
   }
+
   SERVER_PATH[name] = `${protoclName}//${CONFIG.API}/jim/${url}`;
 });
 
