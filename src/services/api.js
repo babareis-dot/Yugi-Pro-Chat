@@ -1,8 +1,8 @@
 import { CONFIG } from '../config'
 import utils from '../common/utils'
 let SERVER_PATH = {
-  USER_SENDCODE: 'sms/send',
-  USER_VERIFYCODE: 'sms_login',
+  USER_SENDCODE: 'email/send',
+USER_VERIFYCODE: 'email_login',
   USER_MODIFY: 'users/update',
   USER_UPDATE_SETTING: 'users/updsettings',
   USER_SEARCH: 'users/search',
