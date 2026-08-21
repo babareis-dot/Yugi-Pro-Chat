@@ -462,6 +462,10 @@ function isPhoneNumber(num){
   var re = /^1[3,4,5,6,7,8,9][0-9]{9}$/;
   return re.test(num);
 }
+function isEmail(email){
+  var re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(String(email).trim());
+}
 function random(len = 256){
   return Math.floor(Math.random()*len)
 }
@@ -535,6 +539,7 @@ export default {
   iterate,
   getCurrentTime,
   isPhoneNumber,
+  isEmail,
   random,
   isChinese,
   isBase64,
